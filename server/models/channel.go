@@ -1,8 +1,7 @@
 package models
 
 type ChannelId string
-type ChannelStream chan<- interface{}
-
+type ChannelStream chan []byte
 type Channel struct {
 	Id     ChannelId
 	Stream ChannelStream

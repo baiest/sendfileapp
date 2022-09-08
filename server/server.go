@@ -27,6 +27,7 @@ func NewServer(host string, port int) *Server {
 		Host:     host,
 		Port:     port,
 		Channels: channels,
+		Clients:  make([]models.Client, 0),
 	}
 }
 
@@ -46,41 +47,48 @@ func (s *Server) Run() {
 			continue
 		}
 		client := models.NewClient(conn.RemoteAddr().String())
-
-		// inputMessage := bufio.NewScanner(conn)
-		// for inputMessage.Scan() {
 		s.readClient(conn, client)
-		// 	fmt.Printf("%s: %s\n", client.Id, inputMessage.Text())
-		// }
-		// channel := s.Channels["1"]
-		// client.Receive(channel)
-		// fmt.Printf("%s:%d\n", client.Id, len(client.Channels))
 	}
 }
 
 func (s *Server) readClient(conn net.Conn, client *models.Client) {
 	buff := make([]byte, 1024)
-	lenBuff, err := conn.Read(buff)
-	tmpBuff := bytes.NewBuffer(buff[:lenBuff])
-	req := new(models.Request)
-	gob.NewDecoder(tmpBuff).Decode(req)
-
-	s.reducer(req, client, conn)
-
+	_, err := conn.Read(buff)
+	fmt.Println("Cliente conectado")
 	if err != nil {
 		if err != io.EOF {
 			fmt.Println("Error: ", err)
 		}
 	}
+
+	tmpBuff := bytes.NewBuffer(buff)
+	req := new(models.Request)
+	gob.NewDecoder(tmpBuff).Decode(req)
+
+	s.reducer(req, client, conn)
 }
 
 func (s *Server) reducer(req *models.Request, client *models.Client, conn net.Conn) {
 	fmt.Println(req.Action)
 	switch req.Action {
 	case "received":
-		client.Receive(s.Channels[models.ChannelId(req.Payload)])
-		fmt.Println(client.Id, client.Channels)
-		conn.Write([]byte("Agregado channel" + " " + string(req.Payload)))
+		go func() {
+			channel := s.Channels[models.ChannelId(req.ChannelId)]
+			client.Receive(channel)
+			fmt.Println(client.Id, client.Channels, channel.Id)
+			conn.Write([]byte("Agregado channel" + " " + string(req.ChannelId) + "\n"))
+			for {
+				for data := range channel.Stream {
+					conn.Write(data)
+					conn.Write([]byte("\n"))
+				}
+			}
+		}()
+	case "send":
+		go func() {
+			channel := s.Channels[models.ChannelId(req.ChannelId)]
+			channel.Stream <- req.Data
+		}()
 	default:
 		fmt.Println("Acción no encontrada")
 	}

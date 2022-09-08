@@ -1,7 +1,6 @@
 package models
 
-type Request struct {
-	Action    string
+type Send struct {
 	ChannelId string
 	Data      []byte
 }

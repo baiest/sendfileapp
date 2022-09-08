@@ -1,6 +1,7 @@
 package models
 
 type Request struct {
-	Action  string
-	Payload []byte
+	Action    string
+	ChannelId string
+	Data      []byte
 }
