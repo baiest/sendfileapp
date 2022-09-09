@@ -7,9 +7,8 @@ import (
 	"io"
 	"log"
 	"net"
-	"os"
 
-	"github.com/baiest/sendfileapp/client/models"
+	"github.com/baiest/sendfileapp/models"
 )
 
 var channel = flag.String("c", "1", "channel")
@@ -30,22 +29,12 @@ func Connect() {
 		Send(conn)
 		return
 	}
-
 	done := make(chan struct{})
 	go func() {
-		io.Copy(os.Stdout, conn)
+		io.Copy(log.Writer(), conn)
 		done <- struct{}{}
 	}()
-
-	CopyContent(conn, os.Stdin)
 	<-done
-}
-
-func CopyContent(dst io.Writer, src io.Reader) {
-	_, err := io.Copy(dst, src)
-	if err != nil {
-		log.Fatal(err)
-	}
 }
 
 func Send(conn net.Conn) {
