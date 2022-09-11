@@ -4,22 +4,19 @@ import (
 	"bytes"
 	"encoding/gob"
 	"flag"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"net"
-	"os"
 	"path/filepath"
 
 	"github.com/baiest/sendfileapp/models"
 	"github.com/baiest/sendfileapp/utils"
 )
 
-var channel = flag.String("c", "1", "channel")
-var action = flag.String("a", "receive", "action")
-var data = flag.String("d", "Hola", "data")
-var filePath = flag.String("f", "", "file")
+var channel = flag.String("channel", "1", "Channel's name to listen files")
+var action = flag.String("action", "receive", "Action to send or receive files")
+var filePath = flag.String("file", "", "Path's file to send")
 
 func Send(conn net.Conn) {
 	defer conn.Close()
@@ -56,11 +53,6 @@ func Receive(conn net.Conn) {
 	bin_buf := new(bytes.Buffer)
 	gob.NewEncoder(bin_buf).Encode(req)
 	conn.Write(bin_buf.Bytes())
-
-	err := os.MkdirAll(fmt.Sprintf("./channel-%s", req.ChannelId), os.ModePerm)
-	if err != nil {
-		log.Fatal(err)
-	}
 }
 
 func main() {
@@ -73,11 +65,13 @@ func main() {
 		return
 	}
 
-	if *action == "receive" {
+	switch *action {
+	case "receive":
 		Receive(conn)
-	} else {
+	case "send":
 		Send(conn)
-		return
+	default:
+		log.Fatal("Acción no encontrada, las acciones permitidas son: receive, send")
 	}
 
 	for {
