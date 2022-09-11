@@ -1,4 +1,4 @@
-package server
+package main
 
 import (
 	"bytes"
@@ -9,6 +9,7 @@ import (
 	"net"
 
 	"github.com/baiest/sendfileapp/models"
+	"github.com/baiest/sendfileapp/utils"
 )
 
 type Server struct {
@@ -48,7 +49,7 @@ func (s *Server) Run() {
 
 func (s *Server) handleConnection(conn net.Conn) {
 	defer conn.Close()
-	buff := make([]byte, 1024)
+	buff := make([]byte, 1024*10)
 	_, err := conn.Read(buff)
 	if err != nil {
 		if err != io.EOF {
@@ -56,41 +57,76 @@ func (s *Server) handleConnection(conn net.Conn) {
 		}
 	}
 
-	tmpBuff := bytes.NewBuffer(buff)
-	req := new(models.Request)
-	gob.NewDecoder(tmpBuff).Decode(req)
+	req := utils.ToAction(buff)
+
+	log.Println(fmt.Sprintf("{ Type: %s Channel: %s Filename: %s Data size: %d }", req.Type, req.ChannelId, req.FileName, len(req.Data)))
 	s.reducer(req, conn)
 }
 
-func (s *Server) reducer(req *models.Request, conn net.Conn) {
-	switch req.Action {
+func (s *Server) reducer(req *models.Action, conn net.Conn) {
+	switch req.Type {
 	case "received":
 		s.clientReceive(conn, req)
 	case "send":
 		s.clientSend(conn, req)
 	default:
-		conn.Write([]byte("Acción no encontrada"))
+		res := models.Action{
+			Type: "log",
+			Data: []byte("Acción no encontrada"),
+		}
+		resBuf := new(bytes.Buffer)
+		gob.NewEncoder(resBuf).Encode(res)
+		conn.Write(resBuf.Bytes())
 	}
 }
 
-func (s *Server) clientReceive(conn net.Conn, req *models.Request) {
+func (s *Server) clientReceive(conn net.Conn, req *models.Action) {
+	res := models.Action{
+		Type: "log",
+		Data: nil,
+	}
+	resBuf := new(bytes.Buffer)
 	channel, ok := s.Channels[models.ChannelId(req.ChannelId)]
 	if !ok {
-		conn.Write([]byte(fmt.Sprintf("El canal '%s' no existe", req.ChannelId)))
+		res.Type = "close"
+		res.Data = []byte(fmt.Sprintf("El canal '%s' no existe", req.ChannelId))
+		gob.NewEncoder(resBuf).Encode(res)
+		conn.Write(resBuf.Bytes())
 		conn.Close()
 		return
 	}
+
 	channel.AddClient(conn)
-	conn.Write([]byte("Agregado al channel:" + " " + string(req.ChannelId)))
-	for data := range channel.Stream {
+	res.Data = []byte(fmt.Sprintf("Agregado al canal %s", req.ChannelId))
+	gob.NewEncoder(resBuf).Encode(res)
+	conn.Write(resBuf.Bytes())
+
+	for request := range channel.Stream {
 		for _, client := range channel.Clients {
-			fmt.Println(client)
-			client.Write(data)
+			res := models.Action{
+				Type:      "file",
+				FileName:  request.FileName,
+				ChannelId: channel.Id,
+				Data:      request.Data,
+			}
+
+			resBuf := new(bytes.Buffer)
+			gob.NewEncoder(resBuf).Encode(res)
+			_, err := client.Write(resBuf.Bytes())
+			if err != nil {
+				client.Close()
+				channel.RemoveClient(client)
+			}
 		}
 	}
 }
 
-func (s *Server) clientSend(conn net.Conn, req *models.Request) {
+func (s *Server) clientSend(conn net.Conn, req *models.Action) {
 	channel := s.Channels[models.ChannelId(req.ChannelId)]
-	channel.Stream <- req.Data
+	channel.Stream <- req
+}
+
+func main() {
+	server := NewServer("localhost", 3000)
+	server.Run()
 }

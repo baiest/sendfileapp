@@ -6,7 +6,7 @@ import (
 )
 
 type ChannelId string
-type ChannelStream chan []byte
+type ChannelStream chan *Action
 type Channel struct {
 	Id      ChannelId
 	Stream  ChannelStream
@@ -24,4 +24,13 @@ func NewChannel(id ChannelId, channel ChannelStream) *Channel {
 func (c *Channel) AddClient(client net.Conn) {
 	c.Clients = append(c.Clients, client)
 	fmt.Println(c.Clients)
+}
+
+func (c *Channel) RemoveClient(client net.Conn) {
+	for index, current := range c.Clients {
+		if current == client {
+			c.Clients = append(c.Clients[:index], c.Clients[index+1:]...)
+			break
+		}
+	}
 }
