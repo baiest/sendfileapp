@@ -49,18 +49,31 @@ func (s *Server) Run() {
 
 func (s *Server) handleConnection(conn net.Conn) {
 	defer conn.Close()
-	buff := make([]byte, 1024*10)
-	_, err := conn.Read(buff)
-	if err != nil {
-		if err != io.EOF {
+	const BUFFER_SIZE = 256
+	buff := make([]byte, BUFFER_SIZE)
+	var totalBuff []byte
+	for {
+		n, err := conn.Read(buff)
+		totalBuff = append(totalBuff, buff...)
+		if err != nil {
+			if err == io.EOF {
+				log.Println("finish.")
+				break
+			}
 			fmt.Println("Error: ", err)
+			for _, channel := range s.Channels {
+				channel.RemoveClient(conn)
+				log.Println(channel.Clients)
+			}
+			break
+		}
+		if n < BUFFER_SIZE {
+			req := utils.ToAction(totalBuff)
+			log.Println(fmt.Sprintf("{ Type: %s Channel: %s Filename: %s Data size: %d }", req.Type, req.ChannelId, req.FileName, len(req.Data)))
+			go s.reducer(req, conn)
+			totalBuff = []byte{}
 		}
 	}
-
-	req := utils.ToAction(buff)
-
-	log.Println(fmt.Sprintf("{ Type: %s Channel: %s Filename: %s Data size: %d }", req.Type, req.ChannelId, req.FileName, len(req.Data)))
-	s.reducer(req, conn)
 }
 
 func (s *Server) reducer(req *models.Action, conn net.Conn) {
@@ -122,6 +135,7 @@ func (s *Server) clientReceive(conn net.Conn, req *models.Action) {
 }
 
 func (s *Server) clientSend(conn net.Conn, req *models.Action) {
+	log.Println("Terminado de subir")
 	channel := s.Channels[models.ChannelId(req.ChannelId)]
 	channel.Stream <- req
 }
