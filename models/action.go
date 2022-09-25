@@ -1,8 +1,8 @@
 package models
 
 type Action struct {
-	Type      string
-	ChannelId ChannelId
-	FileName  string
-	Data      []byte
+	Type      string    `json:"type"`
+	ChannelId ChannelId `json:"channel_id"`
+	FileName  string    `json:"filename"`
+	Data      []byte    `json:"data"`
 }

@@ -2,9 +2,8 @@ package main
 
 import (
 	"bytes"
-	"encoding/gob"
+	"encoding/json"
 	"flag"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -16,6 +15,9 @@ import (
 	"github.com/baiest/sendfileapp/utils"
 )
 
+/*
+	Flags to command line
+*/
 var channel = flag.String("channel", "1", "Channel's name to listen files")
 var action = flag.String("action", "receive", "Action to send or receive files")
 var filePath = flag.String("file", "", "Path's file to send")
@@ -39,14 +41,12 @@ func Send(conn net.Conn) {
 		FileName:  filepath.Base(path),
 		Data:      file,
 	}
-
-	reqBuf := new(bytes.Buffer)
-	gob.NewEncoder(reqBuf).Encode(req)
-	_, err = conn.Write(reqBuf.Bytes())
+	data, err := json.Marshal(req)
 	if err != nil {
-		log.Println("Error encoding", err)
+		log.Fatal(err)
 	}
-	fmt.Println(len(reqBuf.Bytes()))
+	log.Println(len(data))
+	conn.Write(data)
 }
 
 func Receive(conn net.Conn) {
@@ -55,10 +55,30 @@ func Receive(conn net.Conn) {
 		Type:      "received",
 		ChannelId: models.ChannelId(*channel),
 	}
+	data, err := json.Marshal(req)
+	if err != nil {
+		log.Fatal(err)
+	}
+	conn.Write(data)
+}
 
-	bin_buf := new(bytes.Buffer)
-	gob.NewEncoder(bin_buf).Encode(req)
-	conn.Write(bin_buf.Bytes())
+func readData(buff []byte, wg *sync.WaitGroup, lock *sync.Mutex) {
+	var res models.Action
+	err := json.Unmarshal(bytes.Trim(buff, "\x00"), &res)
+	if err != nil {
+		log.Println("Reciviendo respuesta:", err)
+		return
+	}
+
+	//Manage type of data
+	switch res.Type {
+	case "file":
+		log.Println("Reciviendo archivos...")
+		wg.Add(1)
+		go utils.CreateFile(&res, wg, lock)
+	case "log":
+		log.Println(string(res.Data))
+	}
 }
 
 func main() {
@@ -71,6 +91,7 @@ func main() {
 		return
 	}
 
+	//Manage flag to action
 	switch *action {
 	case "receive":
 		Receive(conn)
@@ -87,81 +108,25 @@ func main() {
 	const BUFFER_SIZE = 256
 	buff := make([]byte, BUFFER_SIZE)
 	var totalBuff []byte
+
+	//Listen response from server
 	for {
 		n, err := conn.Read(buff)
-		totalBuff = append(totalBuff, buff...)
+		totalBuff = append(totalBuff, buff[:n]...)
 		if err != nil {
 			if err == io.EOF {
 				log.Println("Terminado de leer")
-				buff = make([]byte, 1024)
-				totalBuff = []byte{}
 			} else {
 				log.Fatal(err)
 			}
 		}
+		//Full buffer with data
 		if n < BUFFER_SIZE {
-			res := utils.ToAction(totalBuff)
-			switch res.Type {
-			case "file":
-				log.Println("Reciviendo archivos...")
-				wg.Add(1)
-				go utils.CreateFile(res, wg, lock)
-			case "log":
-				log.Println(string(res.Data))
-			}
+			readData(totalBuff, wg, lock)
+			buff = make([]byte, BUFFER_SIZE)
 			totalBuff = []byte{}
 
 			wg.Wait()
 		}
 	}
 }
-
-// for {
-// 	for {
-// 		_, err := conn.Read(buff)
-// 		totalBuff = append(totalBuff, buff...)
-// 		if err != nil {
-// 			if err == io.EOF {
-// 				log.Println("Terminado de leer")
-// 				res := utils.ToAction(totalBuff)
-
-// 				wg := &sync.WaitGroup{}
-// 				lock := &sync.Mutex{}
-
-// 				switch res.Type {
-// 				case "file":
-// 					log.Println("Reciviendo archivos...")
-// 					wg.Add(1)
-// 					go utils.CreateFile(res, wg, lock)
-// 					log.Printf("Archivo '%s' creado", res.FileName)
-// 				case "log":
-// 					log.Println(string(res.Data))
-// 				}
-// 				wg.Wait()
-// 				break
-// 			}
-// 			log.Fatal(err)
-// 		}
-// 	}
-// 	log.Println("Leyendo...", len(totalBuff))
-// }
-
-// res := utils.ToAction(buff)
-
-// wg := &sync.WaitGroup{}
-// lock := &sync.Mutex{}
-
-// switch res.Type {
-// case "file":
-// 	log.Println("Reciviendo archivos...")
-// 	wg.Add(1)
-// 	go utils.CreateFile(res, wg, lock)
-// 	log.Printf("Archivo '%s' creado", res.FileName)
-// case "log":
-// 	log.Println(string(res.Data))
-// 	// case "close":
-// 	// 	log.Println(string(res.Data))
-// 	// 	conn.Close()
-// 	// 	return
-// }
-// wg.Wait()

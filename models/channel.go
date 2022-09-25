@@ -1,7 +1,6 @@
 package models
 
 import (
-	"fmt"
 	"net"
 )
 
@@ -23,7 +22,6 @@ func NewChannel(id ChannelId, channel ChannelStream) *Channel {
 
 func (c *Channel) AddClient(client net.Conn) {
 	c.Clients = append(c.Clients, client)
-	fmt.Println(c.Clients)
 }
 
 func (c *Channel) RemoveClient(client net.Conn) {
