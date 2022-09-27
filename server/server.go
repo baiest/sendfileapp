@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -153,7 +154,11 @@ func (s *Server) clientSend(conn net.Conn, req *models.Action) {
 	channel.Stream <- req
 }
 
+var host = flag.String("host", "localhost", "Server host")
+var port = flag.Int("port", 3000, "Server port")
+
 func main() {
-	server := NewServer("localhost", 3000)
+	flag.Parse()
+	server := NewServer(*host, *port)
 	server.Run()
 }

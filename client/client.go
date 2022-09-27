@@ -21,6 +21,7 @@ import (
 var channel = flag.String("channel", "1", "Channel's name to listen files")
 var action = flag.String("action", "receive", "Action to send or receive files")
 var filePath = flag.String("file", "", "Path's file to send")
+var server = flag.String("server", "localhost:3000", "Server address")
 
 func Send(conn net.Conn) {
 	defer conn.Close()
@@ -84,7 +85,7 @@ func readData(buff []byte, wg *sync.WaitGroup, lock *sync.Mutex) {
 func main() {
 	flag.Parse()
 
-	conn, err := net.Dial("tcp", "localhost:3000")
+	conn, err := net.Dial("tcp", *server)
 	defer conn.Close()
 	if err != nil {
 		log.Fatal(err)
