@@ -111,7 +111,6 @@ func (s *Server) clientReceive(conn net.Conn, req *models.Action) {
 	}
 	channel, ok := s.Channels[models.ChannelId(req.ChannelId)]
 	if !ok {
-		res.Type = "close"
 		res.Data = []byte(fmt.Sprintf("El canal '%s' no existe", req.ChannelId))
 		data, err := json.Marshal(res)
 		if err != nil {
@@ -150,7 +149,20 @@ func (s *Server) clientReceive(conn net.Conn, req *models.Action) {
 }
 
 func (s *Server) clientSend(conn net.Conn, req *models.Action) {
-	channel := s.Channels[models.ChannelId(req.ChannelId)]
+	defer conn.Close()
+	res := models.Action{
+		Type: "log",
+	}
+	channel, ok := s.Channels[models.ChannelId(req.ChannelId)]
+	if !ok {
+		res.Data = []byte(fmt.Sprintf("El canal '%s' no existe", req.ChannelId))
+		data, err := json.Marshal(res)
+		if err != nil {
+			log.Println(err)
+		}
+		conn.Write(data)
+		return
+	}
 	channel.Stream <- req
 }
 

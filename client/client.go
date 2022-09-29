@@ -24,7 +24,6 @@ var filePath = flag.String("file", "", "Path's file to send")
 var server = flag.String("server", "localhost:3000", "Server address")
 
 func Send(conn net.Conn) {
-	defer conn.Close()
 	path, err := filepath.Abs(*filePath)
 	if err != nil {
 		log.Fatal(err)
@@ -46,8 +45,8 @@ func Send(conn net.Conn) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Println(len(data))
 	conn.Write(data)
+	log.Println("Tamaño de la data enviada: ", len(data))
 }
 
 func Receive(conn net.Conn) {
@@ -63,11 +62,12 @@ func Receive(conn net.Conn) {
 	conn.Write(data)
 }
 
-func readData(buff []byte, wg *sync.WaitGroup, lock *sync.Mutex) {
+func readData(buff []byte, conn net.Conn, wg *sync.WaitGroup, lock *sync.Mutex) {
 	var res models.Action
 	err := json.Unmarshal(bytes.Trim(buff, "\x00"), &res)
 	if err != nil {
-		log.Println("Reciviendo respuesta:", err)
+		log.Println("Error reciviendo respuesta:", err)
+		conn.Close()
 		return
 	}
 
@@ -79,6 +79,9 @@ func readData(buff []byte, wg *sync.WaitGroup, lock *sync.Mutex) {
 		go utils.CreateFile(&res, wg, lock)
 	case "log":
 		log.Println(string(res.Data))
+	case "close":
+		log.Println(string(res.Data))
+		conn.Close()
 	}
 }
 
@@ -98,7 +101,6 @@ func main() {
 		Receive(conn)
 	case "send":
 		Send(conn)
-		return
 	default:
 		log.Fatal("Acción no encontrada, las acciones permitidas son: receive, send")
 	}
@@ -115,15 +117,13 @@ func main() {
 		n, err := conn.Read(buff)
 		totalBuff = append(totalBuff, buff[:n]...)
 		if err != nil {
-			if err == io.EOF {
-				log.Println("Terminado de leer")
-			} else {
+			if err != io.EOF {
 				log.Fatal(err)
 			}
 		}
 		//Full buffer with data
 		if n < BUFFER_SIZE {
-			readData(totalBuff, wg, lock)
+			readData(totalBuff, conn, wg, lock)
 			buff = make([]byte, BUFFER_SIZE)
 			totalBuff = []byte{}
 
