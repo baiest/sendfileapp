@@ -79,9 +79,6 @@ func readData(buff []byte, conn net.Conn, wg *sync.WaitGroup, lock *sync.Mutex) 
 		go utils.CreateFile(&res, wg, lock)
 	case "log":
 		log.Println(string(res.Data))
-	case "close":
-		log.Println(string(res.Data))
-		conn.Close()
 	}
 }
 
